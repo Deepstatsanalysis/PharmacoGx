@@ -4,19 +4,28 @@
 \alias{PharmacoSet}
 \title{PharmacoSet constructor}
 \usage{
-PharmacoSet(name, molecularProfiles = list(), cell = data.frame(),
-  drug = data.frame(), sensitivityInfo = data.frame(),
-  sensitivityRaw = array(dim = c(0, 0, 0)), sensitivityProfiles = matrix(),
-  sensitivityN = matrix(nrow = 0, ncol = 0), perturbationN = array(NA, dim =
-  c(0, 0, 0)), curationDrug = data.frame(), curationCell = data.frame(),
-  curationTissue = data.frame(), datasetType = c("sensitivity",
-  "perturbation", "both"), verify = TRUE)
+PharmacoSet(
+  name,
+  molecularProfiles = list(),
+  cell = data.frame(),
+  drug = data.frame(),
+  sensitivityInfo = data.frame(),
+  sensitivityRaw = array(dim = c(0, 0, 0)),
+  sensitivityProfiles = matrix(),
+  sensitivityN = matrix(nrow = 0, ncol = 0),
+  perturbationN = array(NA, dim = c(0, 0, 0)),
+  curationDrug = data.frame(),
+  curationCell = data.frame(),
+  curationTissue = data.frame(),
+  datasetType = c("sensitivity", "perturbation", "both"),
+  verify = TRUE
+)
 }
 \arguments{
 \item{name}{A \code{character} string detailing the name of the dataset}
 
-\item{molecularProfiles}{A \code{list} of ExpressionSet objects containing
-molecular profiles}
+\item{molecularProfiles}{A \code{list} of SummarizedExperiment objects containing
+molecular profiles for each data type.}
 
 \item{cell}{A \code{data.frame} containg the annotations for all the cell
 lines profiled in the data set, across all data types}

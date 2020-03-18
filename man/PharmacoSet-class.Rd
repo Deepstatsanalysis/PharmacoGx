@@ -10,10 +10,11 @@
 \alias{drugInfo<-,PharmacoSet,data.frame-method}
 \alias{phenoInfo,PharmacoSet,character-method}
 \alias{phenoInfo<-,PharmacoSet,character,data.frame-method}
-\alias{molecularProfiles,PharmacoSet,character-method}
+\alias{phenoInfo<-,PharmacoSet,character,DataFrame-method}
+\alias{molecularProfiles,PharmacoSet-method}
 \alias{molecularProfiles<-,PharmacoSet,character,matrix-method}
-\alias{featureInfo,PharmacoSet,character-method}
-\alias{featureInfo<-,PharmacoSet,character,data.frame-method}
+\alias{featureInfo,PharmacoSet-method}
+\alias{featureInfo<-,PharmacoSet,character,DataFrame-method}
 \alias{sensitivityInfo,PharmacoSet-method}
 \alias{sensitivityInfo<-,PharmacoSet,data.frame-method}
 \alias{sensitivityProfiles,PharmacoSet-method}
@@ -43,18 +44,17 @@
 
 \S4method{phenoInfo}{PharmacoSet,character}(cSet, mDataType)
 
-\S4method{phenoInfo}{PharmacoSet,character,data.frame}(object,
-  mDataType) <- value
+\S4method{phenoInfo}{PharmacoSet,character,data.frame}(object, mDataType) <- value
+
+\S4method{phenoInfo}{PharmacoSet,character,DataFrame}(object, mDataType) <- value
 
 \S4method{molecularProfiles}{PharmacoSet,character}(cSet, mDataType)
 
-\S4method{molecularProfiles}{PharmacoSet,character,matrix}(object,
-  mDataType) <- value
+\S4method{molecularProfiles}{PharmacoSet,character,matrix}(object, mDataType) <- value
 
 \S4method{featureInfo}{PharmacoSet,character}(cSet, mDataType)
 
-\S4method{featureInfo}{PharmacoSet,character,data.frame}(object,
-  mDataType) <- value
+\S4method{featureInfo}{PharmacoSet,character,DataFrame}(object, mDataType) <- value
 
 \S4method{sensitivityInfo}{PharmacoSet}(cSet)
 
@@ -95,77 +95,8 @@
 
 \item{value}{A replacement value}
 
-\item{pSet}{A \code{PharmacoSet} object}
-
-\item{mDataType}{A \code{character} with the type of molecular data to return/update}
-
-\item{pSet}{The \code{PharmacoSet} to retrieve rna annotations from}
-
-\item{mDataType}{the type of molecular data}
-
-\item{object}{The \code{PharmacoSet} to retrieve molecular experiment annotations from}
-
-\item{mDataType}{the type of molecular data}
-
-\item{value}{a \code{data.frame} with the new experiment annotations}
-
-\item{pSet}{The \code{PharmacoSet} to retrieve molecular profiles from}
-
-\item{mDataType}{the type of molecular data}
-
-\item{object}{The \code{PharmacoSet} to replace molecular profiles in}
-
-\item{mDataType}{The type of molecular data to be updated}
-
-\item{value}{A \code{matrix} with the new profiles}
-
-\item{pSet}{The \code{PharmacoSet} to retrieve feature annotations from}
-
-\item{mDataType}{the type of molecular data}
-
-\item{object}{The \code{PharmacoSet} to replace gene annotations in}
-
-\item{mDataType}{The type of molecular data to be updated}
-
-\item{value}{A \code{data.frame} with the new feature annotations}
-
-\item{pSet}{The \code{PharmacoSet} to retrieve sensitivity experiment annotations from}
-
-\item{object}{The \code{PharmacoSet} to update}
-
-\item{value}{A \code{data.frame} with the new sensitivity annotations}
-
-\item{pSet}{The \code{PharmacoSet} to retrieve sensitivity experiment data from}
-
-\item{object}{The \code{PharmacoSet} to update}
-
-\item{value}{A \code{data.frame} with the new sensitivity profiles. If a matrix object is passed in, converted to data.frame before assignment}
-
-\item{pSet}{The \code{PharmacoSet}}
-
-\item{pSet}{The \code{PharmacoSet} to return cell names from}
-
-\item{object}{The \code{PharmacoSet} to update}
-
-\item{value}{A \code{character} vector of the new cell names}
-
-\item{pSet}{The \code{PharmacoSet}}
-
-\item{mDataType}{The molecular data type to return feature names for}
-
-\item{pSet}{A \code{PharmacoSet}}
-
-\item{pSet}{A \code{PharmacoSet}}
-
-\item{pSet}{A \code{PharmacoSet}}
-
-\item{object}{A \code{PharmacoSet}}
-
-\item{value}{A new 3D \code{array} with the number of perturbation experiments per drug and cell line, and data type}
-
-\item{object}{A \code{PharmacoSet}}
-
-\item{value}{A new \code{data.frame} with the number of sensitivity experiments per drug and cell line}
+\item{mDataType}{A \code{character} with the type of molecular data to 
+return/update}
 }
 \value{
 An object of the PharmacoSet class
@@ -270,7 +201,9 @@ A generic for the sensNumber method
 
 \item \code{phenoInfo}: Return the experiment info from the given type of molecular data in PharmacoSet
 
-\item \code{phenoInfo<-}: Update the the given type of molecular data experiment info in the PharmacoSet
+\item \code{phenoInfo<-}: Update the given type of molecular data experiment info in the PharmacoSet
+
+\item \code{phenoInfo<-}: Update the given type of molecular data experiment info in the PharmacoSet
 
 \item \code{molecularProfiles}: Return the given type of molecular data from the PharmacoSet
 
@@ -329,12 +262,12 @@ experiments
 including the \code{$name} and the session information for how the object
 was creating, detailing the exact versions of R and all the packages used}
 
-\item{\code{molecularProfiles}}{A \code{list} containing 4 \code{Biobase::ExpressionSet} 
+\item{\code{molecularProfiles}}{A \code{list} containing 4 \code{SummarizedExperiment} 
 type object for holding data for RNA, DNA, SNP and Copy Number Variation 
 measurements respectively, with associated \code{fData} and \code{pData} 
 containing the row and column metadata}
 
-\item{\code{cell}}{A \code{data.frame} containg the annotations for all the cell 
+\item{\code{cell}}{A \code{data.frame} containing the annotations for all the cell 
 lines profiled in the data set, across all data types}
 
 \item{\code{drug}}{A \code{data.frame} containg the annotations for all the drugs 

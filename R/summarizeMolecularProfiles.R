@@ -29,15 +29,30 @@
 #' @param summarize A flag which when set to FALSE (defaults to TRUE) disables summarizing and
 #'   returns the data unchanged as a ExpressionSet
 #' @param verbose \code{boolean} should messages be printed
+#' @param binarize.threshold \code{numeric} A value on which the molecular data is binarized. 
+#'   If NA, no binarization is done.
+#' @param binarize.direction \code{character} One of "less" or "greater", the direction of binarization on 
+#'   binarize.threshold, if it is not NA. 
 #' @return \code{matrix} An updated PharmacoSet with the molecular data summarized
 #'   per cell line.
 #' @importFrom utils setTxtProgressBar txtProgressBar
-#' @importFrom Biobase ExpressionSet exprs pData AnnotatedDataFrame assayDataElement assayDataElement<- fData<-
+#' @importFrom SummarizedExperiment SummarizedExperiment rowData rowData<- colData colData<- assays assays<-
+#' @importFrom Biobase AnnotatedDataFrame
 #' @export
 
 ##TODO:: Add features parameter
 
-summarizeMolecularProfiles <- function(pSet, mDataType, cell.lines, features, summary.stat=c("mean", "median", "first", "last", "and", "or"), fill.missing=TRUE, summarize=TRUE, verbose=TRUE) {
+summarizeMolecularProfiles <- function(pSet, 
+                                       mDataType, 
+                                       cell.lines, 
+                                       features, 
+                                       summary.stat = c("mean", "median", "first", "last", "and", "or"), 
+                                       fill.missing = TRUE, 
+                                       summarize = TRUE, 
+                                       verbose = TRUE,
+                                       binarize.threshold = NA, 
+                                       binarize.direction = c("less", "greater")
+                                       ) {
   
   
   ### Placed here to make sure the pSet argument gets checked first by R. 
@@ -61,10 +76,12 @@ summarizeMolecularProfiles <- function(pSet, mDataType, cell.lines, features, su
   }
   
   summary.stat <- match.arg(summary.stat)
-  if((!Biobase::annotation(pSet@molecularProfiles[[mDataType]]) %in% c("mutation","fusion")) & (!summary.stat %in% c("mean", "median", "first", "last"))) {
+  binarize.direction <- match.arg(binarize.direction)
+  
+  if((!S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation %in% c("mutation","fusion")) & (!summary.stat %in% c("mean", "median", "first", "last"))) {
     stop ("Invalid summary.stat, choose among: mean, median, first, last" )
   }
-  if((Biobase::annotation(pSet@molecularProfiles[[mDataType]]) %in% c("mutation","fusion")) & (!summary.stat %in% c("and", "or"))) {
+  if((S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation %in% c("mutation","fusion")) & (!summary.stat %in% c("and", "or"))) {
     stop ("Invalid summary.stat, choose among: and, or" )
   }
   
@@ -75,7 +92,7 @@ summarizeMolecularProfiles <- function(pSet, mDataType, cell.lines, features, su
   dd <- molecularProfiles(pSet, mDataType)
   pp <- phenoInfo(pSet, mDataType)
   
-  if(Biobase::annotation(pSet@molecularProfiles[[mDataType]]) == "mutation") {
+  if(S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation == "mutation") {
     tt <- dd
     tt[which(!is.na(dd) & dd =="wt")] <- FALSE
     tt[which(!is.na(dd) & dd !="wt")] <- TRUE
@@ -83,10 +100,24 @@ summarizeMolecularProfiles <- function(pSet, mDataType, cell.lines, features, su
     dimnames(tt) <- dimnames(dd)
     dd <- tt
   }
-  if(Biobase::annotation(pSet@molecularProfiles[[mDataType]]) == "fusion") {
+  if(S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation == "fusion") {
     tt <- dd
     tt[which(!is.na(dd) & dd =="0")] <- FALSE
     tt[which(!is.na(dd) & dd !="0")] <- TRUE
+    tt <- apply(tt, 2, as.logical)
+    dimnames(tt) <- dimnames(dd)
+    dd <- tt
+  }
+  if(S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation %in% c("cnv", "rna", "rnaseq", "isoform") 
+     && !is.na(binarize.threshold)) {
+    tt <- dd
+    switch(binarize.direction, "less" = {
+          tt[which(!is.na(dd) & dd < binarize.threshold)] <- TRUE
+          tt[which(!is.na(dd) & dd >= binarize.threshold)] <- FALSE
+    }, "greater" = {
+          tt[which(!is.na(dd) & dd > binarize.threshold)] <- TRUE
+          tt[which(!is.na(dd) & dd <= binarize.threshold)] <- FALSE
+    })
     tt <- apply(tt, 2, as.logical)
     dimnames(tt) <- dimnames(dd)
     dd <- tt
@@ -171,22 +202,23 @@ summarizeMolecularProfiles <- function(pSet, mDataType, cell.lines, features, su
   pp2 <- pp2[cell.lines, , drop=FALSE]
   pp2[ , "cellid"] <- cell.lines
   res <- pSet@molecularProfiles[[mDataType]]
-  if(Biobase::annotation(pSet@molecularProfiles[[mDataType]]) %in% c("mutation", "fusion")) {
+  if(S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation %in% c("mutation", "fusion")) {
     tt <- dd2
     tt[which(!is.na(dd2) & dd2)] <- "1"
     tt[which(!is.na(dd2) & !dd2)] <- "0"
     dd2 <- tt
   }
-  res <- ExpressionSet(dd2)
+  res <- SummarizedExperiment::SummarizedExperiment(dd2)
   #Biobase::exprs(res) <- dd2
-  pp2 <- as.data.frame(pp2, stringsAsFactors=FALSE)
+  pp2 <- S4Vectors::DataFrame(pp2, row.names=rownames(pp2))
   pp2$tissueid <- cellInfo(pSet)[pp2$cellid, "tissueid"]
-  Biobase::pData(res) <- pp2
-  Biobase::fData(res) <- featureInfo(pSet, mDataType)
+  SummarizedExperiment::colData(res) <- pp2
+  SummarizedExperiment::rowData(res) <- featureInfo(pSet, mDataType)
   #Biobase::exprs(res) <- Biobase::exprs(res)[features,]
   #Biobase::fData(res) <- Biobase::fData(res)[features,]
   res <- res[features,]
-  Biobase::protocolData(res) <- Biobase::AnnotatedDataFrame()
-  if(!is.null(assayDataElement(res, "se.exprs"))) assayDataElement(res,"se.exprs") <- NULL
+  S4Vectors::metadata(res) <- S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])
+  ####NOTE:: Removed se.exprs from assays in conversion to SE
+  #if(!is.null(SummarizedExperiment::assays(res)$exprs)) SummarizedExperiment::assays(res)$se.exprs <- NULL
   return(res)
 }

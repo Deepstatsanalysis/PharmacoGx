@@ -6,13 +6,25 @@
 other molecular profile) and drug dose response, for use in drug sensitivity
 analysis.}
 \usage{
-drugSensitivitySig(pSet, mDataType, drugs, features,
-  sensitivity.measure = "auc_recomputed", molecular.summary.stat = c("mean",
-  "median", "first", "last", "or", "and"),
+drugSensitivitySig(
+  pSet,
+  mDataType,
+  drugs,
+  features,
+  cells,
+  tissues,
+  sensitivity.measure = "auc_recomputed",
+  molecular.summary.stat = c("mean", "median", "first", "last", "or", "and"),
   sensitivity.summary.stat = c("mean", "median", "first", "last"),
-  returnValues = c("estimate", "pvalue", "fdr"), sensitivity.cutoff,
-  standardize = c("SD", "rescale", "none"), nthread = 1, verbose = TRUE,
-  ...)
+  returnValues = c("estimate", "pvalue", "fdr"),
+  sensitivity.cutoff,
+  standardize = c("SD", "rescale", "none"),
+  molecular.cutoff = NA,
+  molecular.cutoff.direction = c("less", "greater"),
+  nthread = 1,
+  verbose = TRUE,
+  ...
+)
 }
 \arguments{
 \item{pSet}{[PharmacoSet] a PharmacoSet of the perturbation experiment type}
@@ -25,6 +37,12 @@ signatures. Should match the names used in the PharmacoSet.}
 
 \item{features}{[character] a vector of features for which to compute the
 signatures. Should match the names used in correspondant molecular data in PharmacoSet.}
+
+\item{cells}{[character] allows choosing exactly which cell lines to include for the signature fitting. 
+Should be a subset of cellNames(pSet)}
+
+\item{tissues}{[character] a vector of which tissue types to include in the signature fitting. 
+Should be a subset of cellInfo(pSet)$tissueid}
 
 \item{sensitivity.measure}{[character] which measure of the drug dose 
 sensitivity should the function use for its computations? Use the 
@@ -39,13 +57,15 @@ summarize duplicates for cell line sensitivity measurements?}
 \item{returnValues}{[character] Which of estimate, t-stat, p-value and fdr
 should the function return for each gene drug pair?}
 
-\item{sensitivity.cutoff}{Allows to provide upper and lower bounds to
-sensitivity measures in the cases where the values exceed physical values
-due to numerical or other errors.}
+\item{sensitivity.cutoff}{[numeric] Allows the user to binarize the sensitivity data using this threshold.}
 
 \item{standardize}{[character] One of "SD", "rescale", or "none", for the form of standardization of
 the data to use. If "SD", the the data is scaled so that SD = 1. If rescale, then the data is scaled so that the 95%
 interquantile range lies in [0,1]. If none no rescaling is done.}
+
+\item{molecular.cutoff}{Allows the user to binarize the sensitivity data using this threshold.}
+
+\item{molecular.cutoff.direction}{[character] One of "less" or "greater", allows to set direction of binarization.}
 
 \item{nthread}{[numeric] if multiple cores are available, how many cores
 should the computation be parallelized over?}

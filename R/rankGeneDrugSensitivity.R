@@ -63,7 +63,7 @@ rankGeneDrugSensitivity <- function (data, drugpheno, type, batch, single.type=F
   if(!any(unlist(lapply(drugpheno,is.factor)))){
      if(ncol(drugpheno)>1){
       ##### FIX NAMES!!!
-      nc <- lapply(1:ncol(drugpheno), function(i){
+      nc <- lapply(seq_len(ncol(drugpheno)), function(i){
 
         est <- paste("estimate", i, sep=".")
         se <-  paste("se", i, sep=".")
@@ -79,12 +79,13 @@ rankGeneDrugSensitivity <- function (data, drugpheno, type, batch, single.type=F
       nc  <- c("estimate", "se", "n", "tstat", "fstat", "pvalue", "df", "fdr")
     }
   } else {
-    nc  <- c("estimate", "se", "n", "pvalue", "fdr")
+    # nc  <- c("estimate", "se", "n", "pvalue", "fdr")
+    nc <- c("estimate", "se", "n", "tstat", "fstat", "pvalue", "df", "fdr")
   }  
     
 
   
-  for (ll in 1:length(ltype)) {
+  for (ll in seq_len(length(ltype))) {
     iix <- !is.na(type) & is.element(type, ltype[[ll]])
     # ccix <- complete.cases(data[iix, , drop=FALSE], drugpheno[iix,,drop=FALSE], type[iix], batch[iix]) ### HACK???
     

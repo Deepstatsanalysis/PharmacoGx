@@ -10,8 +10,7 @@
 #' @examples 
 #' data(GDSCsmall)
 #' data(CCLEsmall)
-#' common <- intersectPSet(list('GDSC'=GDSCsmall,
-#'   'CCLE'=CCLEsmall), intersectOn = c("drugs", "cell.lines", "concentrations"))
+#' common <- intersectPSet(list('GDSC'=GDSCsmall,'CCLE'=CCLEsmall), intersectOn = c("drugs", "cell.lines") )
 #' common$CGP
 #' common$CCLE
 #' 
@@ -19,7 +18,7 @@
 #' @param pSets [list] a list of PharmacoSet objects, of which the function
 #'   should find the intersection
 #' @param intersectOn [character] which identifiers to intersect on, 
-#'   drugs or cell lines
+#'   drugs, cell lines, or concentrations
 #' @param drugs a vector of common drugs between pSets.
 #' In case user is intersted on getting intersection on certain drugs,
 #' they can provide their list of drugs.
@@ -30,13 +29,22 @@
 #'   and cell lines that have been tested on together?
 #' @param verbose [boolean] Should the function announce its key steps?
 #' @param nthread [numeric] The number of cores to use to run intersection on concentrations
+#' 
 #' @return [list] a list of pSets, contatining only the intersection
+#' 
+#' @importFrom S4Vectors metadata
+#' @importFrom SummarizedExperiment colData
+#' 
 #' @export
 #' 
 intersectPSet <- function (pSets, intersectOn=c("drugs", "cell.lines", "concentrations"), cells, drugs, strictIntersect=FALSE, verbose=TRUE, nthread=1) {
   
   if (verbose) {
     message("Intersecting large PSets may take a long time ...")
+  }
+
+  if("concentrations" %in% intersectOn && anyNA(sapply(pSets, function(x) return(x@sensitivity$raw)))) {
+    stop("Intersecting on concentrations requires all PSets to have raw data included.")
   }
   ## TODO: Fix the strict intersection!!!!!!
   if (length(pSets) == 1) {
@@ -133,43 +141,56 @@ intersectPSet <- function (pSets, intersectOn=c("drugs", "cell.lines", "concentr
       
       pSets <- .calculateSensitivitiesStar(pSets, exps=expMatch, cap=100, nthread=nthread)
     }
-    if ("cell.lines" %in% intersectOn){
+    if ("cell.lines" %in% intersectOn)
+      {
       molecular.types  <- NULL
-      for (pSet in pSets) {
-        for (eSet in pSet@molecularProfiles) {
-          molecular.types <- union(molecular.types, ifelse(length(grep("rna", Biobase::annotation(eSet)) > 0), "rna", Biobase::annotation(eSet)))
+      for (pSet in pSets) 
+        {
+        for (SE in pSet@molecularProfiles) {
+          molecular.types <- union(molecular.types, ifelse (
+            length(grep("rna", S4Vectors::metadata(SE)$annotation) > 0), 
+            "rna", S4Vectors::metadata(SE)$annotation))
         }
       }
       common.molecular.cells <- list()
-      for (molecular.type in molecular.types) {
+      for (molecular.type in molecular.types) 
+        {
         if(strictIntersect){
-          common.molecular.cells[[molecular.type]] <- intersectList(lapply(pSets, 
-                                                                           function (pSet) { 
-                                                                             eSets <- names(unlist(sapply(pSet@molecularProfiles, function(eSet){grep(molecular.type, Biobase::annotation(eSet))})))
-                                                                             if(length(eSets) > 0){
-                                                                               return(intersectList(sapply(eSets, 
-                                                                                                           function(eSet) {
-                                                                                                             if (length(grep(molecular.type, Biobase::annotation(pSet@molecularProfiles[[eSet]]))) > 0) {
-                                                                                                               intersect(Biobase::pData(pSet@molecularProfiles[[eSet]])$cellid, common.cells)
-                                                                                                             }
-                                                                                                           })))
-                                                                             }
-                                                                           }))
+          common.molecular.cells[[molecular.type]] <- 
+            intersectList(lapply(pSets, function (pSet) 
+            { 
+              SEs <- names(unlist(sapply(pSet@molecularProfiles, function(SE)
+              {
+                grep(molecular.type, S4Vectors::metadata(SE)$annotation)})))
+                if(length(SEs) > 0)
+                {
+                  return(intersectList(sapply(SEs, function(SE) 
+                  {
+                    if (length(grep(
+                      molecular.type, S4Vectors::metadata(
+                        pSet@molecularProfiles[[SE]])$annotation)) > 0) 
+                      {
+                      intersect(colData(pSet@molecularProfiles[[SE]])$cellid, common.cells)
+                      }
+                    })))
+                }
+            }))
         }else{
-          common.molecular.cells[[molecular.type]] <- intersectList(lapply(pSets, 
-                                                                           function (pSet) { 
-                                                                             eSets <- names(unlist(sapply(pSet@molecularProfiles, function(eSet){grep(molecular.type, Biobase::annotation(eSet))})))
-                                                                             return(unionList(sapply(eSets, 
-                                                                                                     function(eSet) {
-                                                                                                       if (length(grep(molecular.type, Biobase::annotation(pSet@molecularProfiles[[eSet]]))) > 0) {
-                                                                                                         intersect(Biobase::pData(pSet@molecularProfiles[[eSet]])$cellid, common.cells)
-                                                                                                       }
-                                                                                                     })))
-                                                                           }))
+          common.molecular.cells[[molecular.type]] <- 
+            intersectList(lapply(pSets, function (pSet) { 
+              SEs <- names(unlist(sapply(pSet@molecularProfiles, function(SE)
+                {
+                grep(molecular.type, S4Vectors::metadata(SE)$annotation)})))
+                return(unionList(sapply(SEs, function(SE) 
+                  {
+                  if (length(grep(molecular.type, S4Vectors::metadata(pSet@molecularProfiles[[SE]])$annotation)) > 0) 
+                    {
+                    intersect(SummarizedExperiment::colData(pSet@molecularProfiles[[SE]])$cellid, common.cells)
+                    }
+                  })))
+                }))
+              }
         }
-      }
-      
-      
     }
     
     

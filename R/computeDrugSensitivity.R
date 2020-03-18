@@ -16,7 +16,7 @@
       trunc <- FALSE
     }
     
-    for(i in 1:nrow(exps)) {
+    for(i in seq_len(nrow(exps))) {
       ranges <- list()
       for (study in names(pSets)) {
         ranges[[study]] <- as.numeric(pSets[[study]]@sensitivity$raw[exps[i,study], ,"Dose"])
@@ -124,14 +124,14 @@
 {
   min.dose <- 0
   max.dose <- 10^100
-  for(i in 1:length(doses))
+  for(i in seq_len(length(doses)))
   {
     min.dose <- max(min.dose, min(as.numeric(doses[[i]]), na.rm = TRUE), na.rm = TRUE)
     max.dose <- min(max.dose, max(as.numeric(doses[[i]]), na.rm = TRUE), na.rm = TRUE)
   }
   
   common.ranges <- list()
-  for(i in 1:length(doses))
+  for(i in seq_len(length(doses)))
   {
     common.ranges[[i]] <- doses[[i]][
       which.min(abs(as.numeric(doses[[i]])-min.dose)):max(
@@ -243,17 +243,17 @@
 ######## TODO ADD computationg from  being passed in params
 
 
-#'  Fits dose-response curves to data given by the user
-#'  and returns the AUC of the fitted curve, normalized to the length of the concentration range. 
-#'
-#'  @param concentration [vector] is a vector of drug concentrations.
-#'
-#'  @param viability [vector] is a vector whose entries are the viability values observed in the presence of the
-#'  drug concentrations whose logarithms are in the corresponding entries of the log_conc, expressed as percentages
-#'  of viability in the absence of any drug.
-#'
-#'  @param trunc [logical], if true, causes viability data to be truncated to lie between 0 and 1 before
-#'  curve-fitting is performed.
+#  Fits dose-response curves to data given by the user
+#  and returns the AUC of the fitted curve, normalized to the length of the concentration range. 
+#
+#  @param concentration [vector] is a vector of drug concentrations.
+#
+#  @param viability [vector] is a vector whose entries are the viability values observed in the presence of the
+#  drug concentrations whose logarithms are in the corresponding entries of the log_conc, expressed as percentages
+#  of viability in the absence of any drug.
+#
+#  @param trunc [logical], if true, causes viability data to be truncated to lie between 0 and 1 before
+#  curve-fitting is performed.
 .computeAUCUnderFittedCurve <- function(concentration, viability, trunc=TRUE, verbose=FALSE) {
   
   # #CHECK THAT FUNCTION INPUTS ARE APPROPRIATE

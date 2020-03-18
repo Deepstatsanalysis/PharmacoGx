@@ -121,6 +121,7 @@ logLogisticRegression <- function(conc,
   if (!median_n==as.integer(median_n)){
     stop("There can only be a integral number of samples to take a median of. Check your setting of median_n parameter, it is not an integer")
   }
+
   
   if (min(upper_bounds - lower_bounds) < 0) {
     print(rbind(lower_bounds, upper_bounds))
@@ -241,7 +242,7 @@ logLogisticRegression <- function(conc,
       neighbours[5, 3] <- pmin(neighbours[5, 3] + span * step[3], upper_bounds[3])
       neighbours[6, 3] <- pmax(neighbours[6, 3] - span * step[3], lower_bounds[3])
       
-      for (i in 1:nrow(neighbours)) {
+      for (i in seq_len(nrow(neighbours))) {
         neighbour_residuals[i] <- .residual(log_conc,
                                             viability,
                                             pars = neighbours[i, ],

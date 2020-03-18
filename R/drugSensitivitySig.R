@@ -41,6 +41,10 @@
 #'   signatures. Should match the names used in the PharmacoSet.
 #' @param features [character] a vector of features for which to compute the
 #'   signatures. Should match the names used in correspondant molecular data in PharmacoSet.
+#' @param cells [character] allows choosing exactly which cell lines to include for the signature fitting. 
+#'   Should be a subset of cellNames(pSet)
+#' @param tissues [character] a vector of which tissue types to include in the signature fitting. 
+#'   Should be a subset of cellInfo(pSet)$tissueid
 #' @param nthread [numeric] if multiple cores are available, how many cores
 #'   should the computation be parallelized over?
 #' @param returnValues [character] Which of estimate, t-stat, p-value and fdr
@@ -52,28 +56,31 @@
 #'   summarize duplicates for cell line molecular profile measurements? 
 #' @param sensitivity.summary.stat What summary statistic should be used to
 #'   summarize duplicates for cell line sensitivity measurements? 
-#' @param sensitivity.cutoff Allows to provide upper and lower bounds to
-#'   sensitivity measures in the cases where the values exceed physical values
-#'   due to numerical or other errors.
+#' @param sensitivity.cutoff [numeric] Allows the user to binarize the sensitivity data using this threshold.
 #' @param standardize [character] One of "SD", "rescale", or "none", for the form of standardization of
 #'   the data to use. If "SD", the the data is scaled so that SD = 1. If rescale, then the data is scaled so that the 95%
 #'   interquantile range lies in [0,1]. If none no rescaling is done. 
+#' @param molecular.cutoff Allows the user to binarize the sensitivity data using this threshold. 
+#' @param molecular.cutoff.direction [character] One of "less" or "greater", allows to set direction of binarization. 
 #' @param verbose [boolean] 'TRUE' if the warnings and other infomrative message shoud be displayed
 #' @param ... additional arguments not currently fully supported by the function  
 #' @return [list] a 3D array with genes in the first dimension, drugs in the
 #'   second, and return values in the third.
 #' @export
 #' @import parallel
-
 drugSensitivitySig <- function(pSet,
  mDataType,
  drugs,
- features, 
+ features,
+ cells, 
+ tissues,
  sensitivity.measure = "auc_recomputed", 
  molecular.summary.stat = c("mean", "median", "first", "last", "or", "and"), 
  sensitivity.summary.stat = c("mean", "median", "first", "last"), 
  returnValues = c("estimate", "pvalue", "fdr"),
  sensitivity.cutoff, standardize = c("SD", "rescale", "none"),
+ molecular.cutoff = NA,
+ molecular.cutoff.direction = c("less", "greater"),
  nthread = 1,
  verbose=TRUE, ...) {
   
@@ -88,7 +95,7 @@ drugSensitivitySig <- function(pSet,
   molecular.summary.stat <- match.arg(molecular.summary.stat)
   sensitivity.summary.stat <- match.arg(sensitivity.summary.stat)
   standardize <- match.arg(standardize)
-  
+  molecular.cutoff.direction <- match.arg(molecular.cutoff.direction)
   dots <- list(...)
   ndots <- length(dots)
   
@@ -100,7 +107,7 @@ drugSensitivitySig <- function(pSet,
   if (!(mDataType %in% names(pSet@molecularProfiles))) {
     stop (sprintf("Invalid mDataType for %s, choose among: %s", pSet@annotation$name, paste(names(pSet@molecularProfiles), collapse=", ")))
   }
-  switch (Biobase::annotation(pSet@molecularProfiles[[mDataType]]),
+  switch (S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation,
     "mutation" = {
       if (!is.element(molecular.summary.stat, c("or", "and"))) {
         stop ("Molecular summary statistic for mutation must be either 'or' or 'and'")
@@ -124,9 +131,13 @@ drugSensitivitySig <- function(pSet,
     "rnaseq" = {
       if (!is.element(molecular.summary.stat, c("mean", "median", "first", "last"))) {
         stop ("Molecular summary statistic for rna must be either 'mean', 'median', 'first' or 'last'")
-      }},
-      stop (sprintf("No summary statistic for %s has been implemented yet", Biobase::annotation(pSet@molecularProfiles[[mDataType]])))
-      )
+    }},
+    "isoform" = {
+      if (!is.element(molecular.summary.stat, c("mean", "median", "first", "last"))) {
+        stop ("Molecular summary statistic for rna must be either 'mean', 'median', 'first' or 'last'")
+    }},
+    stop (sprintf("No summary statistic for %s has been implemented yet", S4Vectors::metadata(pSet@molecularProfiles[[mDataType]])$annotation))
+  )
   
   if (!is.element(sensitivity.summary.stat, c("mean", "median", "first", "last"))) {
     stop ("Sensitivity summary statistic for sensitivity must be either 'mean', 'median', 'first' or 'last'")
@@ -136,10 +147,17 @@ drugSensitivitySig <- function(pSet,
     sensitivity.cutoff <- NA
   }
   if (missing(drugs)){
-    drugn <- drugNames(pSet)
+    drugn <- drugs <- drugNames(pSet)
   } else {
     drugn <- drugs
   }
+
+  if (missing(cells)){
+    celln <- cells <- cellNames(pSet)
+  } else {
+    celln <- cells
+  }
+
   availcore <- parallel::detectCores()
   if ( nthread > availcore) {
     nthread <- availcore
@@ -176,25 +194,44 @@ drugSensitivitySig <- function(pSet,
       stop("None of the drugs were found in the dataset")
     }
     drugn <- drugn[dix]
+
+    cix <- is.element(celln, do.call(rownames, drugpheno.all))
+    if (verbose && !all(cix)) {
+      warning (sprintf("%i/%i cells can be found", sum(cix), length(celln)))
+    }
+    if (!any(cix)) {
+      stop("None of the cells were found in the dataset")
+    }
+    celln <- celln[cix]
     
+    if(!missing(tissues)){
+      celln <- celln[cellInfo(pSet)[celln,"tissueid"] %in% tissues]
+    } else {
+      tissues <- unique(cellInfo(pSet)$tissueid)
+    }
+
     pSet@molecularProfiles[[mDataType]] <- summarizeMolecularProfiles(pSet = pSet,
       mDataType = mDataType,
       summary.stat = molecular.summary.stat,
+      binarize.threshold = molecular.cutoff,
+      binarize.direction = molecular.cutoff.direction,
       verbose = verbose)[features, ]
     
     if(!is.null(dots[["mProfiles"]])){
       mProfiles <- dots[["mProfiles"]]
-      Biobase::exprs(pSet@molecularProfiles[[mDataType]]) <- mProfiles[features, colnames(pSet@molecularProfiles[[mDataType]]), drop = FALSE]
+      SummarizedExperiment::assay(pSet@molecularProfiles[[mDataType]]) <- mProfiles[features, colnames(pSet@molecularProfiles[[mDataType]]), drop = FALSE]
       
     }
     
-    drugpheno.all <- lapply(drugpheno.all, function(x) {x[phenoInfo(pSet, mDataType)[ ,"cellid"], , drop = FALSE]})
+    drugpheno.all <- lapply(drugpheno.all, function(x) {x[intersect(phenoInfo(pSet, mDataType)[ ,"cellid"], celln), , drop = FALSE]})
     
-    type <- as.factor(cellInfo(pSet)[phenoInfo(pSet, mDataType)[ ,"cellid"], "tissueid"]) 
-    batch <- phenoInfo(pSet, mDataType)[, "batchid"]
+    molcellx <- phenoInfo(pSet, mDataType)[ ,"cellid"] %in% celln
+
+    type <- as.factor(cellInfo(pSet)[phenoInfo(pSet, mDataType)[molcellx,"cellid"], "tissueid"]) 
+    batch <- phenoInfo(pSet, mDataType)[molcellx, "batchid"]
     batch[!is.na(batch) & batch == "NA"] <- NA
     batch <- as.factor(batch)
-    names(batch) <- phenoInfo(pSet, mDataType)[ , "cellid"]
+    names(batch) <- phenoInfo(pSet, mDataType)[molcellx, "cellid"]
     batch <- batch[rownames(drugpheno.all[[1]])]
     if (verbose) {
       message("Computing drug sensitivity signatures...")
@@ -217,15 +254,15 @@ drugSensitivitySig <- function(pSet,
       }
       names(res) <- drugn[x]
       return(res)
-    }, drugn=drugn, expr=t(molecularProfiles(pSet, mDataType)[features, , drop=FALSE]), drugpheno=drugpheno.all, type=type, batch=batch, nthread=nthread, standardize=standardize)
+    }, drugn=drugn, expr=t(molecularProfiles(pSet, mDataType)[features, molcellx, drop=FALSE]), drugpheno=drugpheno.all, type=type, batch=batch, nthread=nthread, standardize=standardize)
     
     res <- do.call(c, mcres)
     res <- res[!sapply(res, is.null)]
     drug.sensitivity <- array(NA,
       dim = c(nrow(featureInfo(pSet, mDataType)[features,, drop=FALSE]),
         length(res), ncol(res[[1]])),
-      dimnames = list(rownames(featureInfo(pSet, mDataType)[features,]), names(res), colnames(res[[1]])))
-    for(j in 1:ncol(res[[1]])) {
+      dimnames = list(rownames(featureInfo(pSet, mDataType)[features,, drop=FALSE]), names(res), colnames(res[[1]])))
+    for(j in seq_len(ncol(res[[1]]))) {
       ttt <- sapply(res, function(x, j, k) {
         xx <- array(NA, dim = length(k), dimnames = list(k))
         xx[rownames(x)] <- x[ , j, drop=FALSE]
@@ -236,7 +273,27 @@ drugSensitivitySig <- function(pSet,
       drug.sensitivity[rownames(featureInfo(pSet, mDataType)[features,, drop = FALSE]), names(res), j] <- ttt
     }
     
-    drug.sensitivity <- PharmacoSig(drug.sensitivity, PSetName = pSetName(pSet), Call ="as.character(match.call())", SigType='Sensitivity')
+    drug.sensitivity <- PharmacoSig(drug.sensitivity, 
+                                    PSetName = pSetName(pSet), 
+                                    Call = as.character(match.call()), 
+                                    SigType='Sensitivity',
+                                    Arguments = list(
+                                      "mDataType" = mDataType,
+                                      "drugs" = drugs,
+                                      "features" = features,
+                                      "cells" = cells, 
+                                      "tissues" = tissues,
+                                      "sensitivity.measure" = sensitivity.measure, 
+                                      "molecular.summary.stat" = molecular.summary.stat, 
+                                      "sensitivity.summary.stat" = sensitivity.summary.stat, 
+                                      "returnValues" = returnValues,
+                                      "sensitivity.cutoff" = sensitivity.cutoff,
+                                      "standardize" = standardize,
+                                      "molecular.cutoff" = molecular.cutoff,
+                                      "molecular.cutoff.direction" = molecular.cutoff.direction,
+                                      "nthread" = nthread,
+                                      "verbose" = verbose))
     
     return(drug.sensitivity)
   }
+

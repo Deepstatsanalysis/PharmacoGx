@@ -12,18 +12,19 @@
 #' respecitively as sensitivity and perturbation datasets.
 #' 
 #' @param pSet A \code{PharmacoSet} object
-#' @param mDataType A \code{character} with the type of molecular data to return/update
+#' @param mDataType A \code{character} with the type of molecular data to 
+#'   return/update
 #' @param object A \code{PharmacoSet} object
 #' @param value A replacement value
 #' 
 #' @slot annotation A \code{list} of annotation data about the PharmacoSet,
 #'    including the \code{$name} and the session information for how the object
 #'    was creating, detailing the exact versions of R and all the packages used
-#' @slot molecularProfiles A \code{list} containing 4 \code{Biobase::ExpressionSet} 
+#' @slot molecularProfiles A \code{list} containing 4 \code{SummarizedExperiment} 
 #'   type object for holding data for RNA, DNA, SNP and Copy Number Variation 
 #'   measurements respectively, with associated \code{fData} and \code{pData} 
 #'   containing the row and column metadata
-#' @slot cell A \code{data.frame} containg the annotations for all the cell 
+#' @slot cell A \code{data.frame} containing the annotations for all the cell 
 #'   lines profiled in the data set, across all data types
 #' @slot drug A \code{data.frame} containg the annotations for all the drugs 
 #'   profiled in the dataset, across all data types
@@ -51,10 +52,16 @@
                                                      contains = "CoreSet")
 
 
-# The default constructor above does a poor job of explaining the required structure of a PharmacoSet. 
-# The constructor function defined below guides the user into providing the required components of the curation and senstivity lists
-# and hides the annotation slot which the user does not need to manually fill. 
-# This also follows the design of the Expression Set class.
+# The default constructor above does a poor job of explaining the required 
+# structure of a PharmacoSet. The constructor function defined below guides the 
+# user into providing the required components of the curation and senstivity 
+# lists and hides the annotation slot which the user does not need to manually 
+# fill. This also follows the design of the Expression Set class.
+
+
+#####
+# CONSTRUCTOR
+#####
 
 #' PharmacoSet constructor
 #' 
@@ -69,8 +76,8 @@
 #' browseVignettes("PharmacoGx")
 #' 
 #' @param name A \code{character} string detailing the name of the dataset
-#' @param molecularProfiles A \code{list} of ExpressionSet objects containing
-#'   molecular profiles 
+#' @param molecularProfiles A \code{list} of SummarizedExperiment objects containing
+#'   molecular profiles for each data type.
 #' @param cell A \code{data.frame} containg the annotations for all the cell
 #'   lines profiled in the data set, across all data types
 #' @param drug A \code{data.frame} containg the annotations for all the drugs
@@ -92,11 +99,15 @@
 #' @param verify \code{boolean} Should the function verify the PharmacoSet and
 #'   print out any errors it finds after construction?
 #' @return An object of class PharmacoSet
-#' @export
+#
 #' @import methods
 #' @importFrom utils sessionInfo
 #' @importFrom stats na.omit
-PharmacoSet <-  function(name, 
+#' @importFrom SummarizedExperiment rowData colData assay assays assayNames Assays
+#' @importFrom S4Vectors DataFrame SimpleList metadata
+#' 
+#' @export
+PharmacoSet <-  function(name,
                           molecularProfiles=list(), 
                           cell=data.frame(), 
                           drug=data.frame(), 
@@ -109,7 +120,8 @@ PharmacoSet <-  function(name,
                           curationCell = data.frame(), 
                           curationTissue = data.frame(), 
                           datasetType=c("sensitivity", "perturbation", "both"),
-                          verify = TRUE)
+                          verify = TRUE
+                         )
 {
     datasetType <- match.arg(datasetType)
     
@@ -119,13 +131,18 @@ PharmacoSet <-  function(name,
     annotation$sessionInfo <- sessionInfo()
     annotation$call <- match.call()
     
+    ## TODO:: If the colnames and rownames are not found below, it will fill with NAs. This is undersirable behaviour.
     #molecularProfiles <- list("dna"=dna, "rna"=rna, "snp"=snp, "cnv"=cnv)
-    for (i in 1:length(molecularProfiles)){
-        if (class(molecularProfiles[[i]]) != "ExpressionSet"){
-            stop(sprintf("Please provide the %s data as an ExpressionSet", names(molecularProfiles[i])))
+    ## TODO:: Determine if I should use SummarizedExperiment construtor here?
+    for (i in seq_along(molecularProfiles)){
+        if (class(molecularProfiles[[i]]) != "SummarizedExperiment"){
+            stop(sprintf("Please provide the %s data as a SummarizedExperiment", 
+                         names(molecularProfiles[i])))
         }else{
-      Biobase::fData(molecularProfiles[[i]]) <- Biobase::fData(molecularProfiles[[i]])[rownames(Biobase::exprs(molecularProfiles[[i]])), , drop=FALSE]
-      Biobase::pData(molecularProfiles[[i]]) <- Biobase::pData(molecularProfiles[[i]])[colnames(Biobase::exprs(molecularProfiles[[i]])), , drop=FALSE]
+      rowData(molecularProfiles[[i]]) <- 
+        rowData(molecularProfiles[[i]])[rownames(assays(molecularProfiles[[i]])[[1]]), , drop=FALSE]
+      colData(molecularProfiles[[i]]) <- 
+        colData(molecularProfiles[[i]])[colnames(assays(molecularProfiles[[i]])[[1]]), , drop=FALSE]
         }
     
     }
@@ -138,7 +155,8 @@ PharmacoSet <-  function(name,
     
     sensitivity <- list()
     
-    if (!all(rownames(sensitivityInfo) == rownames(sensitivityProfiles) & rownames(sensitivityInfo) == dimnames(sensitivityRaw)[[1]])){
+    if (!all(rownames(sensitivityInfo) == rownames(sensitivityProfiles) & 
+             rownames(sensitivityInfo) == dimnames(sensitivityRaw)[[1]])){
         stop("Please ensure all the row names match between the sensitivity data.")
     }
     
@@ -157,13 +175,16 @@ PharmacoSet <-  function(name,
     perturbation <- list()
     perturbation$n <- perturbationN
     if (datasetType == "perturbation" || datasetType == "both") {
-        perturbation$info <- "The metadata for the perturbation experiments is available for each molecular type by calling the appropriate info function. \n For example, for RNA transcriptome perturbations, the metadata can be accessed using rnaInfo(pSet)."
+        perturbation$info <- "The metadata for the perturbation experiments is 
+          available for each molecular type by calling the appropriate info 
+          function. \n For example, for RNA transcriptome perturbations, 
+          the metadata can be accessed using rnaInfo(pSet)."
     } else {
         perturbation$info <- "Not a perturbation dataset."
     }
     
     pSet  <- .PharmacoSet(annotation=annotation, molecularProfiles=molecularProfiles, cell=as.data.frame(cell), drug=as.data.frame(drug), datasetType=datasetType, sensitivity=sensitivity, perturbation=perturbation, curation=curation)
-    if (verify) { checkPSetStructure(pSet)}
+    if (verify) { checkPSetStructure(pSet) }
   if(length(sensitivityN) == 0 & datasetType %in% c("sensitivity", "both")) {
     pSet@sensitivity$n <- .summarizeSensitivityNumbers(pSet)
   }
@@ -190,6 +211,12 @@ setReplaceMethod("cellInfo", signature = signature(object="PharmacoSet",value="d
   object <- callNextMethod(object, value)
   object
 })
+
+
+#####
+# DRUG SLOT GETTERS/SETTERS
+#####
+
 #' drugInfo Generic
 #' 
 #' Generic for drugInfo method 
@@ -215,17 +242,24 @@ setGeneric("drugInfo", function(pSet) standardGeneric("drugInfo"))
 #' @return Updated \code{PharmacoSet}
 setGeneric("drugInfo<-", function(object, value) standardGeneric("drugInfo<-"))
 #' @describeIn PharmacoSet Returns the annotations for all the drugs tested in the PharmacoSet
+#' 
 #' @export
+#' 
 setMethod(drugInfo, "PharmacoSet", function(pSet){
-
   pSet@drug
 })
 #' @describeIn PharmacoSet Update the drug annotations
+#' 
 #' @export
 setReplaceMethod("drugInfo", signature = signature(object="PharmacoSet",value="data.frame"), function(object, value){
   object@drug <- value
   object
 })
+
+#####
+# MOLECULAR PROFILES SLOT GETTERS/SETTERS ---------------------------------
+#####
+
 
 #' phenoInfo Generic
 #' 
@@ -254,16 +288,16 @@ setMethod(phenoInfo, c("PharmacoSet", "character"), function(cSet, mDataType){
 
 #' phenoInfo<- Generic
 #' 
-#' Generic for phenoInfo replace method 
+#' Generic for phenoInfo replace method
 #' 
 #' @examples
-#' 
 #' data(CCLEsmall)
 #' phenoInfo(CCLEsmall, mDataType="rna") <- phenoInfo(CCLEsmall, mDataType="rna")
 #' 
 #' @param object The \code{PharmacoSet} to retrieve molecular experiment annotations from
 #' @param mDataType the type of molecular data 
-#' @param value a \code{data.frame} with the new experiment annotations
+#' @param value a \code{dataframe}  with the new experiment annotations
+#' 
 #' @return The updated \code{PharmacoSet}
 # setGeneric("phenoInfo<-", function(object, mDataType, value) standardGeneric("phenoInfo<-"))
 #' @importMethodsFrom CoreGx phenoInfo<-
@@ -362,7 +396,8 @@ setMethod(featureInfo, signature("PharmacoSet", "character"), function(cSet, mDa
 #' 
 #' @param object The \code{PharmacoSet} to replace gene annotations in
 #' @param mDataType The type of molecular data to be updated
-#' @param value A \code{data.frame} with the new feature annotations
+#' @param value A \code{DataFrame} with the new feature annotations
+#' 
 #' @return Updated \code{PharmacoSet}
 # setGeneric("featureInfo<-", function(object, mDataType, value) standardGeneric("featureInfo<-"))
 #' @describeIn PharmacoSet Replace the gene info for the molecular data
@@ -376,9 +411,13 @@ setReplaceMethod("featureInfo", signature = signature(object="PharmacoSet", mDat
   
 })
 
+#####
+# SENSITIVITY SLOT GETTERS/SETTERS
+#####
+
 #' sensitivityInfo Generic
 #' 
-#' Generic for sensitivityInfo method 
+#' Generic for sensitivityInfo method
 #' 
 #' @examples
 #' data(CCLEsmall)
@@ -407,7 +446,7 @@ setMethod(sensitivityInfo, "PharmacoSet", function(pSet){
 #' sensitivityInfo(CCLEsmall) <- sensitivityInfo(CCLEsmall)
 #' 
 #' @param object The \code{PharmacoSet} to update
-#' @param value A \code{data.frame} with the new sensitivity annotations
+#' @param value A \code{DataFrame} with the new sensitivity annotations
 #' @return Updated \code{PharmacoSet} 
 # setGeneric("sensitivityInfo<-", function(object, value) standardGeneric("sensitivityInfo<-"))
 #' @importMethodsFrom CoreGx sensitivityInfo<-
@@ -494,6 +533,8 @@ setMethod(sensitivityMeasures, "PharmacoSet", function(pSet){
   callNextMethod(pSet)
 
 })
+
+##TODO:: Arrange slot accessors to be together!
 
 #' drugNames Generic
 #' 
@@ -759,7 +800,7 @@ setMethod("show", signature=signature(object="PharmacoSet"),
         cat("Date Created: ", dateCreated(object), "\n")
     cat("Number of cell lines: ", nrow(cellInfo(object)), "\n")
     cat("Number of drug compounds: ", nrow(drugInfo(object)), "\n")
-        if("dna" %in% names(object@molecularProfiles)){cat("DNA: \n");cat("\tDim: ", dim(molecularProfiles(object, mDataType="dna")), "\n")}
+      if("dna" %in% names(object@molecularProfiles)){cat("DNA: \n");cat("\tDim: ", dim(molecularProfiles(object, mDataType="dna")), "\n")}
       if("rna" %in% names(object@molecularProfiles)){cat("RNA: \n");cat("\tDim: ", dim(molecularProfiles(object, mDataType="rna")), "\n")}
       if("rnaseq" %in% names(object@molecularProfiles)){cat("RNASeq: \n");cat("\tDim: ", dim(molecularProfiles(object, mDataType="rnaseq")), "\n")}
       if("snp" %in% names(object@molecularProfiles)){cat("SNP: \n");cat("\tDim: ", dim(molecularProfiles(object, mDataType="snp")), "\n")}
@@ -834,7 +875,7 @@ setMethod("dim", signature=signature(x="PharmacoSet"), function(x){
 #' data(CCLEsmall)
 #' CCLEdrugs  <- drugNames(CCLEsmall)
 #' CCLEcells <- cellNames(CCLEsmall)
-#' PSet <- subsetTo(CCLEsmall,drugs = CCLEdrugs[1], cells = CCLEcells[1])
+#' PSet <- subsetTo(CCLEsmall, drugs = CCLEdrugs[1], cells = CCLEcells[1])
 #' PSet
 #' 
 #' @param pSet A \code{PharmacoSet} to be subsetted
@@ -881,23 +922,25 @@ subsetTo <- function(pSet, cells=NULL, drugs=NULL, molecular.data.cells=NULL, ke
   }
   
     ### TODO:: implement strict subsetting at this level!!!!
+    ### TODO:: refactor this monstrosity of a function into helpers
   
     ### the function missing does not work as expected in the context below, because the arguments are passed to the anonymous
     ### function in lapply, so it does not recognize them as missing
   
-  pSet@molecularProfiles <- lapply(pSet@molecularProfiles, function(eset, cells, drugs, molecular.data.cells){
+  pSet@molecularProfiles <- lapply(pSet@molecularProfiles, function(SE, cells, drugs, molecular.data.cells){
     
-    molecular.data.type <- ifelse(length(grep("rna", Biobase::annotation(eset)) > 0), "rna", Biobase::annotation(eset))
+    molecular.data.type <- ifelse(length(grep("rna", S4Vectors::metadata(SE)$annotation) > 0), "rna", S4Vectors::metadata(SE)$annotation)
     if (length(grep(molecular.data.type, names(molecular.data.cells))) > 0) {
       cells <- molecular.data.cells[[molecular.data.type]]
     }
-      column_indices <- NULL
+  
+        column_indices <- NULL
   
       if (length(cells)==0 && length(drugs)==0) {
-          column_indices <- 0:ncol(eset)
+          column_indices <- seq_len(ncol(SE)) # This still returns the number of samples in an SE, but without a label
       }
       if(length(cells)==0 && pSet@datasetType=="sensitivity") {
-        column_indices <- 0:ncol(eset)
+        column_indices <- seq_len(ncol(SE))
       }
   
       cell_line_index <- NULL
@@ -905,7 +948,7 @@ subsetTo <- function(pSet, cells=NULL, drugs=NULL, molecular.data.cells=NULL, ke
         if (!all(cells %in% cellNames(pSet))) {
               stop("Some of the cell names passed to function did not match to names in the PharmacoSet. Please ensure you are using cell names as returned by the cellNames function")
         }
-          cell_line_index <- which(Biobase::pData(eset)[["cellid"]] %in% cells)
+          cell_line_index <- which(SummarizedExperiment::colData(SE)[["cellid"]] %in% cells)
         # if (length(na.omit(cell_line_index))==0){
     #       stop("No cell lines matched")
     #     }
@@ -916,12 +959,12 @@ subsetTo <- function(pSet, cells=NULL, drugs=NULL, molecular.data.cells=NULL, ke
             if (!all(drugs %in% drugNames(pSet))){
                   stop("Some of the drug names passed to function did not match to names in the PharmacoSet. Please ensure you are using drug names as returned by the drugNames function")
             }
-          drugs_index <- which(Biobase::pData(eset)[["drugid"]] %in% drugs)
+          drugs_index <- which(SummarizedExperiment::colData(SE)[["drugid"]] %in% drugs)
           # if (length(drugs_index)==0){
     #         stop("No drugs matched")
     #       }
           if(keep.controls) {
-            control_indices <- which(Biobase::pData(eset)[["xptype"]]=="control")
+            control_indices <- which(SummarizedExperiment::colData(SE)[["xptype"]]=="control")
             drugs_index <- c(drugs_index, control_indices)
           }
         }
@@ -941,10 +984,10 @@ subsetTo <- function(pSet, cells=NULL, drugs=NULL, molecular.data.cells=NULL, ke
       }
       }
   
-      row_indices <- 0:nrow(Biobase::exprs(eset))
+      row_indices <- seq_len(nrow(SummarizedExperiment::assay(SE, 1)))
   
-      eset <- eset[row_indices,column_indices]
-      return(eset)
+      SE <- SE[row_indices, column_indices]
+      return(SE)
 
   }, cells=cells, drugs=drugs, molecular.data.cells=molecular.data.cells)  
   
@@ -996,11 +1039,11 @@ subsetTo <- function(pSet, cells=NULL, drugs=NULL, molecular.data.cells=NULL, ke
 			drugs <- unique(sensitivityInfo(pSet)[["drugid"]])
 		}
 		if(pSet@datasetType == "perturbation" | pSet@datasetType == "both"){
-			drugs <- union(drugs, na.omit(unionList(lapply(pSet@molecularProfiles, function(eSet){unique(Biobase::pData(eSet)[["drugid"]])}))))
+			drugs <- union(drugs, na.omit(unionList(lapply(pSet@molecularProfiles, function(SE){unique(colData(SE)[["drugid"]])}))))
 		}
 	}
 	if (length(cells)==0) {
-		cells <- union(cells, na.omit(unionList(lapply(pSet@molecularProfiles, function(eSet){unique(Biobase::pData(eSet)[["cellid"]])}))))
+		cells <- union(cells, na.omit(unionList(lapply(pSet@molecularProfiles, function(SE){unique(colData(SE)[["cellid"]])}))))
         if (pSet@datasetType =="sensitivity" | pSet@datasetType == "both"){
             cells <- union(cells, sensitivityInfo(pSet)[["cellid"]])
         }
@@ -1011,10 +1054,10 @@ subsetTo <- function(pSet, cells=NULL, drugs=NULL, molecular.data.cells=NULL, ke
 	pSet@curation$cell <- pSet@curation$cell[cells , , drop=drop]
 	pSet@curation$tissue <- pSet@curation$tissue[cells , , drop=drop]
 	if (pSet@datasetType == "sensitivity" | pSet@datasetType == "both"  & length(exps) == 0) {
-	  pSet@sensitivity$n <- pSet@sensitivity$n[cells, drugs , drop=drop]
+	  pSet@sensitivity$n <- pSet@sensitivity$n[cells, drugs, drop=drop]
 	}
 	if (pSet@datasetType == "perturbation" | pSet@datasetType == "both") {
-	    pSet@perturbation$n <- pSet@perturbation$n[cells,drugs, , drop=drop]
+	  pSet@perturbation$n <- pSet@perturbation$n[cells, drugs, , drop=drop]
     }
       return(pSet)
 }
@@ -1032,11 +1075,11 @@ updateCellId <- function(pSet, new.ids = vector("character")){
   }
   
   
-  pSet@molecularProfiles <- lapply(pSet@molecularProfiles, function(eset){
+  pSet@molecularProfiles <- lapply(pSet@molecularProfiles, function(SE){
           
-      myx <- match(Biobase::pData(eset)[["cellid"]],rownames(cellInfo(pSet)))
-      Biobase::pData(eset)[["cellid"]]  <- new.ids[myx]
-      return(eset)
+      myx <- match(SummarizedExperiment::colData(SE)[["cellid"]], rownames(cellInfo(pSet)))
+      SummarizedExperiment::colData(SE)[["cellid"]]  <- new.ids[myx]
+      return(SE)
         })
 
 
@@ -1176,11 +1219,11 @@ updateDrugId <- function(pSet, new.ids = vector("character")){
 
   }
   if(pSet@datasetType=="perturbation"|pSet@datasetType=="both"){
-    pSet@molecularProfiles <- lapply(pSet@molecularProfiles, function(eset){
+    pSet@molecularProfiles <- lapply(pSet@molecularProfiles, function(SE){
 
-      myx <- match(Biobase::pData(eset)[["drugid"]],rownames(drugInfo(pSet)))
-      Biobase::pData(eset)[["drugid"]]  <- new.ids[myx]
-      return(eset)
+      myx <- match(SummarizedExperiment::colData(SE)[["drugid"]],rownames(drugInfo(pSet)))
+      SummarizedExperiment::colData(SE)[["drugid"]]  <- new.ids[myx]
+      return(SE)
     })
   }
   
@@ -1254,6 +1297,7 @@ updateDrugId <- function(pSet, new.ids = vector("character")){
 
 .summarizeSensitivityNumbers <- function(pSet) {
 
+  assign("PSet_sumSenNum", pSet, envir = .GlobalEnv)
   if (pSet@datasetType != "sensitivity" && pSet@datasetType != "both") {
     stop ("Data type must be either sensitivity or both")
   }
@@ -1283,7 +1327,6 @@ updateDrugId <- function(pSet, new.ids = vector("character")){
     return(sensitivity.info)
 }
 
-
 .summarizeMolecularNumbers <- function(pSet) {
   
   ## consider all molecular types
@@ -1301,7 +1344,6 @@ updateDrugId <- function(pSet, new.ids = vector("character")){
   }
   return(molecular.info)
 }
-
 
 .summarizePerturbationNumbers <- function(pSet) {
 
@@ -1335,9 +1377,9 @@ updateDrugId <- function(pSet, new.ids = vector("character")){
   
   perturbation.info <- array(0, dim=c(length(celln), length(drugn), length(pSet@molecularProfiles)), dimnames=list(celln, drugn, names((pSet@molecularProfiles))))
 
-    for (i in 1:length(pSet@molecularProfiles)) {
-      if (nrow(Biobase::pData(pSet@molecularProfiles[[i]])) > 0 && all(is.element(c("cellid", "drugid"), colnames(Biobase::pData(pSet@molecularProfiles[[i]]))))) {
-      tt <- table(Biobase::pData(pSet@molecularProfiles[[i]])[ , "cellid"], Biobase::pData(pSet@molecularProfiles[[i]])[ , "drugid"])
+    for (i in seq_len(length(pSet@molecularProfiles))) {
+      if (nrow(Biobase::pData(pSet@molecularProfiles[[i]])) > 0 && all(is.element(c("cellid", "drugid"), colnames(SummarizedExperiment::colData(pSet@molecularProfiles[[i]]))))) {
+      tt <- table(SummarizedExperiment::colData(pSet@molecularProfiles[[i]])[ , "cellid"], SummarizedExperiment::colData(pSet@molecularProfiles[[i]])[ , "drugid"])
         perturbation.info[rownames(tt), colnames(tt), names(pSet@molecularProfiles)[i]] <- tt
       }
     }
@@ -1354,46 +1396,70 @@ updateDrugId <- function(pSet, new.ids = vector("character")){
 #' 
 #' @examples
 #' data(CCLEsmall)
-#' 
 #' checkPSetStructure(CCLEsmall)
 #' 
 #' @param pSet A \code{PharmacoSet} to be verified
 #' @param plotDist Should the function also plot the distribution of molecular data?
 #' @param result.dir The path to the directory for saving the plots as a string
-#' @return Prints out messages whenever describing the errors found in the structure of the pset object passed in. 
-#' @export
+#' 
+#' @return Prints out messages whenever describing the errors found in the structure of the pset object passed in.
+#' 
 #' @importFrom graphics hist
 #' @importFrom grDevices dev.off pdf
-
+#' 
+#' @export
 checkPSetStructure <-
   function(pSet, plotDist=FALSE, result.dir=".") {
+    
+    # Make directory to store results if it doesn't exist
     if(!file.exists(result.dir) & plotDist) { dir.create(result.dir, showWarnings=FALSE, recursive=TRUE) }
-    for( i in 1:length(pSet@molecularProfiles)) {
+    
+    #####
+    # Checking molecularProfiles
+    #####
+    # Can this be parallelized or does it mess with the order of printing warnings?
+    for( i in seq_len(length(pSet@molecularProfiles))) {
       profile <- pSet@molecularProfiles[[i]]
       nn <- names(pSet@molecularProfiles)[i]
-      if((Biobase::annotation(profile) == "rna" | Biobase::annotation(profile) == "rnaseq") & plotDist)
+      
+      # Testing plot rendering for rna and rnaseq
+      if((S4Vectors::metadata(profile)$annotation == "rna" | S4Vectors::metadata(profile)$annotation == "rnaseq") & plotDist)
       {
         pdf(file=file.path(result.dir, sprintf("%s.pdf", nn)))
-        hist(Biobase::exprs(profile), breaks = 100)
+        hist(assays(profile)[[1]], breaks = 100)
         dev.off()
       }
-      warning(ifelse(nrow(Biobase::fData(profile)) != nrow(Biobase::exprs(profile)), sprintf("%s: number of features in fData is different from expression slots", nn), sprintf("%s: fData dimension is OK", nn)))
-      warning(ifelse(nrow(Biobase::pData(profile)) != ncol(Biobase::exprs(profile)), sprintf("%s: number of cell lines in pData is different from expression slots", nn), sprintf("%s: pData dimension is OK", nn)))
-      warning(ifelse("cellid" %in% colnames(Biobase::pData(profile)), "", sprintf("%s: cellid does not exist in pData columns", nn)))
-      warning(ifelse("batchid" %in% colnames(Biobase::pData(profile)), "", sprintf("%s: batchid does not exist in pData columns", nn)))
-      if(Biobase::annotation(profile) == "rna" | Biobase::annotation(profile) == "rnaseq")
+      
+      
+      ## TODO:: Confirm the above and modify warnings accordingly
+      #warning(ifelse(nrow(rowData(profile)) != nrow(assays(profile)$exprs), sprintf("%s: number of features in fData is different from SummarizedExperiment slots", nn), sprintf("%s: rowData dimension is OK", nn)))
+      #warning(ifelse(nrow(Biobase::pData(profile)) != ncol(Biobase::exprs(profile)), sprintf("%s: number of cell lines in pData is different from expression slots", nn), sprintf("%s: colData dimension is OK", nn)))
+      
+      
+      # Checking sample metadata for required columns
+      warning(ifelse("cellid" %in% colnames(colData(profile)), "", sprintf("%s: cellid does not exist in colData (samples) columns", nn)))
+      warning(ifelse("batchid" %in% colnames(colData(profile)), "", sprintf("%s: batchid does not exist in colData (samples) columns", nn)))
+      
+      # Checking mDataType of the SummarizedExperiment for required columns
+      if(S4Vectors::metadata(profile)$annotation == "rna" | S4Vectors::metadata(profile)$annotation == "rnaseq")
       {
-        warning(ifelse("BEST" %in% colnames(Biobase::fData(profile)), "BEST is OK", sprintf("%s: BEST does not exist in fData columns", nn)))
-        warning(ifelse("Symbol" %in% colnames(Biobase::fData(profile)), "Symbol is OK", sprintf("%s: Symbol does not exist in fData columns", nn)))
+        warning(ifelse("BEST" %in% colnames(rowData(profile)), "BEST is OK", sprintf("%s: BEST does not exist in rowData (features) columns", nn)))
+        warning(ifelse("Symbol" %in% colnames(rowData(profile)), "Symbol is OK", sprintf("%s: Symbol does not exist in rowData (features) columns", nn)))
       }
-      if("cellid" %in% colnames(Biobase::pData(profile))) {
-        if(!all(Biobase::pData(profile)[,"cellid"] %in% rownames(pSet@cell))) {
+      
+      # Check that all cellids from the PSet are included in molecularProfiles
+      if("cellid" %in% colnames(rowData(profile))) {
+        if(!all(colData(profile)[,"cellid"] %in% rownames(pSet@cell))) {
           warning(sprintf("%s: not all the cell lines in this profile are in cell lines slot", nn))
         }
       }else {
-        warning(sprintf("%s: cellid does not exist in pData", nn))
+        warning(sprintf("%s: cellid does not exist in colData (samples)", nn))
       }
     }
+    
+    #####
+    # Checking cell
+    #####
     if("tissueid" %in% colnames(pSet@cell)) {
       if("unique.tissueid" %in% colnames(pSet@curation$tissue))
       {
